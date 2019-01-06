@@ -1,5 +1,6 @@
 #include "fHE/base_converter.hpp"
 #include "fHE/yell.hpp"
+#include <functional>
 namespace fHE {
 template <class T, size_t _1, size_t _2>
 struct TupleArray {

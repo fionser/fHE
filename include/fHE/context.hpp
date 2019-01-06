@@ -8,7 +8,7 @@ struct context {
   static constexpr size_t nr_ctxt_moduli = 4;
   static constexpr size_t nr_sp_primes = nr_ctxt_moduli;
   static constexpr double sigma = 3.2;
-  static constexpr double encoder_scale = (double) (1ULL << yell::params::kModulusBitsize);
+  static constexpr double encoder_scale = (double) (1ULL << 40);
   static constexpr double plain_scale = (double) (1ULL << 20);
   static constexpr size_t HWT = 32;// hamming weight for the secret key
 
@@ -18,8 +18,8 @@ struct context {
   }
 
   using poly_t = yell::poly<degree>;
-  using gauss_struct = yell::gaussian<uint16_t, 2>;
-  using gauss_t = yell::FastGaussianNoise<uint16_t, 2>;
+  using gauss_struct = yell::gaussian<uint16_t, yell::params::value_type, 2>;
+  using gauss_t = yell::FastGaussianNoise<uint16_t, yell::params::value_type, 2>;
   static gauss_t fg_prng;
 };
 } // namespace fHE

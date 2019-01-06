@@ -14,6 +14,8 @@ include_directories(${GMP_INCLUDES} ${MPFR_INCLUDES} /usr/local/include)
 link_directories(/usr/local/lib)
 set(RUN_LIB yell boost_system ${MPFR_LIBRARIES} ${GMP_LIBRARIES})
 
+# add_definitions(-DYELL_USE_AVX)
+add_definitions(-DYELL_USE_32BITS_MODULI)
 add_definitions(-DYELL_USE_MEM_POOL)
 add_subdirectory(yell)
 include_directories(include/ yell/include)
