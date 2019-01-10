@@ -47,7 +47,7 @@ public:
   */
   // Following three used to convert from special primes to a specific normal primes
   std::array<T, K>           hat_pi_invmod_pi; // (^p_i)^{-1} mod p_i
-  TupleArray<T, L, K>::type  hat_pi_mod_qj;    // (^p_i) mod q_j loop as [l][k]
+  TupleArray<T, L, K>::type  neg_hat_pi_mod_qj;// -(^p_i) mod q_j loop as [l][k]
   std::array<T, L>           P_invmod_qj;      // P^{-1} mod q_j
   std::array<T, L>           P_mod_qj;         // P mod q_j
   // Following three used to convert from normal primes to a specific special primes.
@@ -73,9 +73,9 @@ private:
                                        context::poly_t const& op,
                                        const size_t sp_moduli_index) const;
 
-  void approx_convert_to_normal_basis(std::array<T, degree> *rop,
-                                      context::poly_t const& op,
-                                      const size_t nrl_moduli_index) const;
+  void neg_approx_convert_to_normal_basis(std::array<T, degree> *rop,
+                                          context::poly_t const& op,
+                                          const size_t nrl_moduli_index) const;
 };
 
 BaseConverter::BaseConverter() : impl_(std::make_shared<Impl>()) { }
@@ -115,9 +115,9 @@ BaseConverter::Impl::Impl() {
     size_t cm = context::index_sp_prime(k);
     auto hat_pi_mod_pi = product_of(moduli.begin(), moduli.end(), cm);
     hat_pi_invmod_pi.at(k) = math::inv_mod_prime(hat_pi_mod_pi, cm);
-    // hat_pi_mod_qj[l][k]
+    // neg_hat_pi_mod_qj[l][k]
     for (size_t l = 0; l < L; ++l)
-      hat_pi_mod_qj[l][k] = product_of(moduli.begin(), moduli.end(), l);
+      neg_hat_pi_mod_qj[l][k] = yell::params::P[l] - product_of(moduli.begin(), moduli.end(), l);
   }
 
   // hat_qj_invmod_qj[l]
@@ -199,20 +199,25 @@ bool BaseConverter::Impl::approximated_mod_down(
   context::poly_t sp_part(K);
   for (size_t k = 0; k < K; ++k)
     std::memcpy(sp_part.ptr_at(k), op.cptr_at(L0 + k), sizeof(T) * degree);
+
   // Convert basis from special moduli to L0 normal primes.
   for (size_t j = 0; j < L0; ++j) {
     auto rop_pointer = yell::recast_as_array(*rop, j);
-    approx_convert_to_normal_basis(rop_pointer, sp_part, j);
+    neg_approx_convert_to_normal_basis(rop_pointer, sp_part, j);
   }
 
-  yell::ops::mulmod mulmod;
-  yell::ops::submod submod;
+  yell::ops::mulmod_shoup mulmod;
   for (size_t j = 0; j < L0; ++j) {
     auto dst = rop->ptr_at(j);
     auto src = op.cptr_at(j);
-    for (size_t d = 0; d < degree; ++d, ++dst, ++src) {
-      *dst = submod(*src, *dst, j);
-      mulmod.compute(*dst, P_invmod_qj[j], j);
+    auto end = op.cptr_end(j);
+    auto shoup = yell::ops::shoupify(P_invmod_qj[j], j);
+    while (src != end) {
+      //! In math we compute (op - rop) * P_invmod_qj
+      //! But the approx_convert_to_normal_basis compute the negative rop already
+      //! Thus, we just need (lazy) addition here.
+      auto temp = (*src++) + (*dst);
+      *dst++ = mulmod(temp, P_invmod_qj[j], shoup, j);
     }
   }
   return true;
@@ -267,7 +272,7 @@ void BaseConverter::Impl::approx_convert_to_special_basis(
     indexer, kcm);
 }
 
-void BaseConverter::Impl::approx_convert_to_normal_basis(
+void BaseConverter::Impl::neg_approx_convert_to_normal_basis(
   std::array<T, degree> *rop,
   context::poly_t const& op,
   const size_t nrl_moduli_index) const
@@ -278,7 +283,7 @@ void BaseConverter::Impl::approx_convert_to_normal_basis(
   internal::do_approximated_basis_conversion(
     rop, op, 
     hat_pi_invmod_pi,
-    hat_pi_mod_qj.at(nrl_moduli_index),
+    neg_hat_pi_mod_qj.at(nrl_moduli_index),
     P_mod_qj.at(nrl_moduli_index),
     indexer, nrl_moduli_index);
 }
@@ -295,25 +300,26 @@ void do_approximated_basis_conversion(
   const size_t lcm) 
 {
   if (!rop) return;
-  using gT = yell::params::gt_value_type;
-
-  const yell::ops::mulmod mulmod;
   const size_t nmoduli = op.moduli_count();
   assert(nmoduli <= K);
 
+  using gT = yell::params::gt_value_type;
+  yell::ops::mulmod_shoup mulmod;
   std::array<gT, context::degree> y{};
   for (size_t k = 0; k < nmoduli; ++k) {
-    const T hpi_inv_pi = hat_pi_invmod_pi[k];
     const size_t kcm = indexer(k);
+    const T hpi_inv_pi = hat_pi_invmod_pi[k];
+    const T shoup = yell::ops::shoupify(hpi_inv_pi, kcm);
     const T hpi_qj = hat_pi_mod_qj[k];
     auto x = op.cptr_at(k);
-    for (size_t d = 0; d < context::degree; ++d, ++x) {
-      T t0 = mulmod(*x, hpi_inv_pi, kcm);
-      y[d] += (gT) t0 * hpi_qj;
+    for (auto &yd : y) {
+      //! x * hat_qj_invmod_qj mod qj
+      T t0 = mulmod(*x++, hpi_inv_pi, shoup, kcm);
+      //! lazy reduction
+      yd += (gT) t0 * hpi_qj;
     }
   }
 
-  // lazy reduction
   for (size_t d = 0; d < context::degree; ++d) {
     yell::ops::barret_reduction(&y[d], lcm);
     (*rop)[d] = (T) y[d];
