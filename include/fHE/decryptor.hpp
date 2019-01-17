@@ -13,7 +13,10 @@ struct Decryptor {
 
   bool decrypt(context::poly_t *rop, Cipher const& ctx, SK const& sk) const;
 
+  bool decrypt(double *rop, Cipher const& ctx, SK const& sk) const;
+
   bool decrypt(std::vector<double> *rop, Cipher const& ctx, SK const& sk) const;
+
   bool decrypt(std::vector<std::complex<double>> *rop, Cipher const& ctx, SK const& sk) const;
 
   std::shared_ptr<Encoder> encoder;

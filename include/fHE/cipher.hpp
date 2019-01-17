@@ -1,5 +1,6 @@
 #pragma once
 #include "fHE/context.hpp"
+#include <memory>
 namespace fHE {
 struct Cipher {
 private:
@@ -7,27 +8,36 @@ private:
 public:
   context::poly_t bx;
   context::poly_t ax;
+  std::shared_ptr<context::poly_t> mul_aux = nullptr;
 
   explicit Cipher(size_t L = context::nr_ctxt_moduli) 
     : bx(L), ax(L) { assert(L < yell::params::kMaxNbModuli); }
 
   Cipher(const Cipher &oth) 
-    : bx(oth.bx),
+    : scale_(oth.scale_),
+      bx(oth.bx),
       ax(oth.ax),
-      scale_(oth.scale_) 
+      mul_aux(oth.mul_aux)
   { }
 
   Cipher(Cipher &&oth) 
-    : Cipher(0)
-  { 
-    std::swap(bx, oth.bx);
-    std::swap(ax, oth.ax);
-    scale_ = oth.scale_;
-  }
+    : scale_(oth.scale_),
+      bx(std::move(oth.bx)),
+      ax(std::move(oth.ax)),
+      mul_aux(std::move(oth.mul_aux))
+  { }
 
   ~Cipher() { }
 
-  Cipher& operator=(Cipher oth) = delete;
+  Cipher& operator=(Cipher oth) {
+    std::swap(bx, oth.bx);
+    std::swap(ax, oth.ax);
+    std::swap(mul_aux, oth.mul_aux);
+    scale_ = oth.scale_;
+    return *this;
+  }
+
+  bool canonical() const { return mul_aux == nullptr; };
 
   double scale() const { return scale_; }
 

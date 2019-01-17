@@ -326,5 +326,4 @@ void do_approximated_basis_conversion(
   }
 }
 } // namespace internal
-
 } // namespace fHE

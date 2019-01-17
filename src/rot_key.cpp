@@ -43,7 +43,7 @@ RotKey::RotKey(SK const &sk, uint16_t offset, Direction dir)
 
 RotKey::~RotKey() {}
 
-size_t RotKey::rotation_offset_galois(int offset) const
+size_t RotKey::rotation_offset_galois(int offset)
 {
   constexpr size_t nr_slots = context::degree >> 1u;
   constexpr size_t m = context::degree << 1u;
@@ -76,4 +76,24 @@ void RotKey::lift_normal_moduli(context::poly_t *op) const
       mulmod.compute(*dst++, P_mod_qj, cm);
   }
 }
+
+RotKeySet::RotKeySet(SK const& sk) {
+  for (size_t i = 0; i < logn; ++i) {
+    int idx = 1 << i;
+    auto obj = std::make_shared<RotKey>(sk, idx, RotKey::Direction::LEFT);
+    rot_keys.insert({idx, std::move(obj)});
+  }
+}
+
+RotKeySet::~RotKeySet() {}
+
+const RotKey* RotKeySet::get(uint16_t offset) const {
+  if (offset >= (1LL << logn))
+    return nullptr;
+  auto kv = rot_keys.find(offset);
+  if (kv == rot_keys.end())
+    return nullptr;
+  return kv->second.get();
+}
+
 }// namespace fHE

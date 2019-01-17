@@ -4,6 +4,8 @@
 namespace fHE {
 void apply_galois(context::poly_t *, size_t galois);
 
+void apply_galois_non_ntt(context::poly_t *, size_t galois);
+
 template <class Itr>
 yell::params::value_type product_of(Itr begin, Itr end, size_t moduli_index)
 {

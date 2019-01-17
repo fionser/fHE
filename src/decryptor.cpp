@@ -16,6 +16,8 @@ bool Decryptor::decrypt(context::poly_t *rop, Cipher const& ctx, SK const& sk) c
   const size_t nmoduli = ctx.moduli_count();
   if (nmoduli > sk.sx.moduli_count())
     throw std::runtime_error("Impossible.");
+  if (!ctx.canonical())
+    throw std::runtime_error("Call relinear before decryption.");
   if (!rop)
     return false;
   rop->resize_moduli_count(nmoduli);
@@ -57,6 +59,22 @@ bool Decryptor::decrypt(std::vector<double> *rop, Cipher const& ctx, SK const& s
     return false;
   encoder->decode(rop, plain, ctx.scale());
   return true;
+}
+
+bool Decryptor::decrypt(double *rop, 
+                        Cipher const& ctx, 
+                        SK const& sk) const
+{
+  if (!rop)
+    return false;
+
+  std::vector<double> val;
+  if (decrypt(&val, ctx, sk)) {
+    *rop = val[0];
+    return true;
+  } else {
+    return false;
+  }
 }
 
 } // namespace fHE

@@ -20,7 +20,7 @@ private:
   void iFFT_inplace(std::vector<std::complex<double>> &res) const;
 
   std::vector<std::complex<double>> apply_ifft(
-    std::vector<std::complex<double>> const& values) const;
+   std::vector<std::complex<double>> const& values) const;
 
   std::vector<std::complex<double>> apply_ifft(
     std::vector<double> const& values) const;

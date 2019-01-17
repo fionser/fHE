@@ -36,15 +36,19 @@ bool Encryptor::encrypt(Cipher *rop, context::poly_t const& msg, PK const& pk) c
   return true;
 }
 
+bool Encryptor::encrypt(Cipher *rop, double const& value, PK const& pk) const
+{
+  return encrypt(rop, std::vector<double>(1, value), pk);
+}
+
 bool Encryptor::encrypt(Cipher *rop, std::vector<double> const& values, PK const& pk) const
 {
   if (!rop || !encoder)
     return false;
   context::poly_t plain(context::nr_ctxt_moduli);
   encoder->encode(&plain, values, context::encoder_scale);
-  encrypt(rop, plain, pk);
   rop->scale(context::encoder_scale);
-  return true;
+  return encrypt(rop, plain, pk);
 }
 
 bool Encryptor::encrypt(Cipher *rop, 
@@ -55,9 +59,8 @@ bool Encryptor::encrypt(Cipher *rop,
     return false;
   context::poly_t plain(context::nr_ctxt_moduli);
   encoder->encode(&plain, values, context::encoder_scale);
-  encrypt(rop, plain, pk);
   rop->scale(context::encoder_scale);
-  return true;
+  return encrypt(rop, plain, pk);
 }
 
 } // namespace fHE
