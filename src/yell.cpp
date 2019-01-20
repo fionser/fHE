@@ -40,8 +40,7 @@ void apply_galois_non_ntt(fHE::context::poly_t *op, size_t galois)
 
   for (size_t cm = 0; cm < nmoduli; ++cm) {
     auto input = op->cptr_at(cm);
-    for (size_t d = 0; d < degree; ++d) {
-      auto raw_index = d * galois;
+    for (size_t d = 0, raw_index = 0; d < degree; ++d, raw_index += galois) {
       auto index = raw_index & mod_mask;
       auto t = *input++;
       if ((raw_index >> logn) & 1)
