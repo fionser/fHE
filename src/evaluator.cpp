@@ -322,19 +322,18 @@ void Evaluator::Impl::apply_rotation_key(
     }
   }
 
-  //! backward to power-basis for the mod down operation (with special moduli)
-  for (size_t cm = 0; cm < Li + K; ++cm) {
-    const size_t moduli_idx = cm < Li ? cm : context::index_sp_prime(cm - Li);
-    yell::ntt<context::degree>::backward(d_rotk[0].ptr_at(cm), moduli_idx);
-    yell::ntt<context::degree>::backward(d_rotk[1].ptr_at(cm), moduli_idx);
+  for (size_t kcm = 0; kcm < K; ++kcm) {
+    // only convert the special primes part to power-basis
+    // Inside approximated_mod_down will handle the backward part.
+    const size_t moduli_idx = context::index_sp_prime(kcm);
+    yell::ntt<context::degree>::backward(d_rotk[0].ptr_at(Li + kcm), moduli_idx);
+    yell::ntt<context::degree>::backward(d_rotk[1].ptr_at(Li + kcm), moduli_idx);
   }
 
   auto cpy_d0(*d[0]);
   //! mod down
-  for (int i : {0, 1}) {
-    bconv.approximated_mod_down(rop[i], d_rotk[i]); // rop[i] is now in the power-basis
-    rop[i]->forward();
-  }
+  for (int i : {0, 1})
+    bconv.approximated_mod_down(rop[i], d_rotk[i]);
   (*rop[0]) += cpy_d0;
 }
 

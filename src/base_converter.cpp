@@ -68,7 +68,6 @@ public:
 
   bool rescale(context::poly_t *rop, context::poly_t const& op) const;
 
-private:
   void approx_convert_to_special_basis(std::array<T, degree> *rop,
                                        context::poly_t const& op,
                                        const size_t sp_moduli_index) const;
@@ -101,6 +100,23 @@ bool BaseConverter::rescale(context::poly_t *rop, context::poly_t const& op) con
 {
   if (!impl_) return false;
   return impl_->rescale(rop, op);
+}
+
+void BaseConverter::approx_convert_to_special_basis(std::array<T, degree> *rop,
+                                                    context::poly_t const& op,
+                                                    const size_t sp_moduli_index) const
+{
+  if (!impl_) return;
+  impl_->approx_convert_to_special_basis(rop, op, sp_moduli_index);
+}
+
+void BaseConverter::neg_approx_convert_to_normal_basis(
+    std::array<T, degree> *rop,
+    context::poly_t const& op,
+    const size_t nrl_moduli_index) const
+{
+  if (!impl_) return;
+  impl_->neg_approx_convert_to_normal_basis(rop, op, nrl_moduli_index);
 }
 
 BaseConverter::Impl::Impl() {
@@ -203,7 +219,9 @@ bool BaseConverter::Impl::approximated_mod_down(
   // Convert basis from special moduli to L0 normal primes.
   for (size_t j = 0; j < L0; ++j) {
     auto rop_pointer = yell::recast_as_array(*rop, j);
+    // [op]_{special primes} -> [-op]_qj the j-th normal prime
     neg_approx_convert_to_normal_basis(rop_pointer, sp_part, j);
+    yell::ntt<context::degree>::forward(rop_pointer->data(), j);
   }
 
   yell::ops::mulmod_shoup mulmod;
