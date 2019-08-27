@@ -23,6 +23,7 @@ public:
   bool approximated_mod_down(context::poly_t *rop,
                              context::poly_t const& op) const;
 
+  // The last moduli of [op] is in the power-basis, and other moduli are in the NTT-basis
   bool rescale(context::poly_t *rop, context::poly_t const& op) const;
 
   void approx_convert_to_special_basis(std::array<T, degree> *rop,

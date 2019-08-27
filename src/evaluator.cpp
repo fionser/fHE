@@ -697,12 +697,15 @@ void Evaluator::Impl::Mul::rescale_ntt(
   std::array<context::poly_t *, 2> ct,
   BaseConverter const& bconv) const
 {
+  constexpr size_t degree= context::degree;
+  long last_prime_index = ct[0]->moduli_count() - 1;
+  assert(last_prime_index >= 1);
   for (int i : {0, 1}) {
     assert(rop[i] && ct[i]);
     assert(rop[i]->moduli_count() + 1 == ct[i]->moduli_count());
-    ct[i]->backward();
+    //! only convert the last moduli to power-basis
+    yell::ntt<degree>::backward(ct[i]->ptr_at(last_prime_index), last_prime_index);
     bconv.rescale(rop[i], *(ct[i]));
-    rop[i]->forward();
   }
 }
 

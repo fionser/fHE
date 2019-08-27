@@ -243,6 +243,7 @@ bool BaseConverter::Impl::approximated_mod_down(
 
 bool BaseConverter::Impl::rescale(context::poly_t *rop, context::poly_t const& op) const
 {
+  //! the last moduli of [op] is in the power-basis, and the other are in the NTT-basis
   if (!rop) return false;
   using namespace yell;
   const size_t nmoduli = op.moduli_count();
@@ -250,16 +251,19 @@ bool BaseConverter::Impl::rescale(context::poly_t *rop, context::poly_t const& o
   assert(rop->moduli_count() + 1 == nmoduli);
   yell::ops::mulmod_shoup mulmod;
   const auto last_prime = params::P[nmoduli - 1];
+  std::array<T, degree> last_mod_qi;
   // NOTE: for each moduli, sub the last moduli and then multiply qinv.
   for (size_t j = 0; j < nmoduli - 1; ++j) {
     //! take the last rns moduli with mod qj.
-    auto last_mod = op.cptr_at(nmoduli - 1); 
+    std::memcpy(last_mod_qi.data(), op.cptr_at(nmoduli - 1), sizeof(T) * degree);
+    //! [ct]_qk -> [[ct]_qk]_qj
+    yell::ntt<degree>::forward(last_mod_qi.data(), j);
     auto qinv = math::inv_mod_prime(last_prime, j);
     auto qinv_shoup = ops::shoupify(qinv, j);
     assert(qinv > 0);
     auto dst = rop->ptr_at(j);
     auto head = op.cptr_at(j);
-    auto tail = last_mod;
+    auto tail = last_mod_qi.data();
     for (size_t d = 0; d < degree; ++d) {
       //! (head - tail) * qinv mod p_j, we save one reduction for subtraction.
       auto tmp = *head++ + params::P[j] - *tail++;
