@@ -2,9 +2,27 @@
 #include "fHE/keys.hpp"
 #include "fHE/yell.hpp"
 namespace fHE {
+
+static size_t rotation_offset_galois(int offset)
+{
+  constexpr size_t nr_slots = context::degree >> 1u;
+  constexpr size_t m = context::degree << 1u;
+  constexpr size_t generator = 3;
+  bool sign = offset > 0;
+  offset = std::abs(offset) % nr_slots;
+  if (sign)
+    offset = nr_slots - offset;
+  size_t galois{1};
+  while(offset--) { // g^{k} mod m
+    galois *= generator;
+    galois &= (m - 1);
+  }
+  return galois;
+}
+
 RotKey::RotKey(SK const &sk, uint16_t offset, Direction dir)
     : galois(rotation_offset_galois(dir == Direction::RIGHT ? offset : - (int) offset)),
-       beta(L + K),
+      beta(L + K),
       alpha(L + K, yell::uniform{})
 {
   using  T = yell::params::value_type;
@@ -43,23 +61,6 @@ RotKey::RotKey(SK const &sk, uint16_t offset, Direction dir)
 
 RotKey::~RotKey() {}
 
-size_t RotKey::rotation_offset_galois(int offset)
-{
-  constexpr size_t nr_slots = context::degree >> 1u;
-  constexpr size_t m = context::degree << 1u;
-  constexpr size_t generator = 3;
-  bool sign = offset > 0;
-  offset = std::abs(offset) % nr_slots;
-  if (sign)
-    offset = nr_slots - offset;
-  size_t galois{1};
-  while(offset--) { // g^{k} mod m
-    galois *= generator;
-    galois &= (m - 1);
-  }
-  return galois;
-}
-
 void RotKey::lift_normal_moduli(context::poly_t *op) const
 {
   if (!op) return;
@@ -77,23 +78,46 @@ void RotKey::lift_normal_moduli(context::poly_t *op) const
   }
 }
 
-RotKeySet::RotKeySet(SK const& sk) {
-  for (size_t i = 0; i < logn; ++i) {
-    int idx = 1 << i;
-    auto obj = std::make_shared<RotKey>(sk, idx, RotKey::Direction::LEFT);
-    rot_keys.insert({idx, std::move(obj)});
+MixedRotKey::MixedRotKey(SK const &sk, uint16_t offset, Direction dir)
+    : galois(rotation_offset_galois(dir == Direction::RIGHT ? offset : - (int) offset)),
+      beta(std::vector<poly_t>(L, poly_t(L + 1))),
+      alpha(std::vector<poly_t>(L, poly_t(L + 1, yell::uniform{})))
+{
+  using T = yell::params::value_type;
+  constexpr size_t degree = context::degree;
+  constexpr size_t bytes = degree * sizeof(T);
+
+  context::poly_t ext_sx(L + 1);
+  for (size_t j = 0; j < L + 1; ++j) {
+      auto sx_ptr = j < L ? sk.sx.cptr_at(j) : sk.ext_sx.cptr_at(0);
+      std::memcpy(ext_sx.ptr_at(j), sx_ptr, bytes);
   }
+
+  auto rotated_sx(ext_sx);
+  apply_galois(&rotated_sx, galois);
+  
+  // beta_j = -sx * alpha_j + [qK]_qj * rotated(sx) + e
+  yell::ops::muladd muladd;
+  T qK = yell::params::P[context::index_sp_prime(0)];
+  for (size_t j = 0; j < L; ++j) {
+    context::poly_t *beta_ = get_beta_at(j);
+    const context::poly_t *alpha_ = get_alpha_at(j); 
+    beta_->set(context::gauss_struct(&context::fg_prng));
+    beta_->forward();
+
+    beta_->add_product_of(*alpha_, ext_sx);
+    beta_->negate(); // -e - alpha * sx 
+
+    std::transform(beta_->cptr_at(j), beta_->cptr_end(j),
+                   rotated_sx.cptr_at(j), beta_->ptr_at(j),
+                   [muladd, j, qK] (T const& beta, T const& s) -> T {
+                     // [beta]_qj += qK * [rotated_sx]_qj
+                     return muladd(beta, s, qK, j);
+                   });
+  }
+  rotated_sx.clear();
+  ext_sx.clear();
 }
 
-RotKeySet::~RotKeySet() {}
-
-const RotKey* RotKeySet::get(uint16_t offset) const {
-  if (offset >= (1LL << logn))
-    return nullptr;
-  auto kv = rot_keys.find(offset);
-  if (kv == rot_keys.end())
-    return nullptr;
-  return kv->second.get();
-}
-
+MixedRotKey::~MixedRotKey() {}
 }// namespace fHE

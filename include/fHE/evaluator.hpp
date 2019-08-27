@@ -5,7 +5,8 @@ namespace fHE {
 struct Cipher;
 struct MultKey;
 struct RotKey;
-struct RotKeySet;
+struct MixedRotKey;
+template<class T> struct RotKeySet;
 struct Encoder;
 
 struct Evaluator {
@@ -26,11 +27,15 @@ public:
   //! The rotation offset is specified in the RotKey.
   bool rotate_slots(Cipher *rop, RotKey const& rkey) const;
   bool rotate_slots_non_ntt(Cipher *rop, RotKey const& rkey) const;
+  bool rotate_slots(Cipher *rop, MixedRotKey const& rkey) const;
   //! Rotation with arbitary offset
-  bool rotate_slots(Cipher *rop, int offset, RotKeySet const& rkeys) const;
-  bool rotate_slots_non_ntt(Cipher *rop, int offset, RotKeySet const& rkeys) const;
+  bool rotate_slots(Cipher *rop, int offset, RotKeySet<RotKey> const& rkeys) const;
+  bool rotate_slots(Cipher *rop, int offset, RotKeySet<MixedRotKey> const& rkeys) const;
+  template <class RotKey>
+  bool rotate_slots_non_ntt(Cipher *rop, int offset, RotKeySet<RotKey> const& rkeys) const;
   //! Replicate the specific position of slots, using logN rotations and 
   //! a single masking.
-  bool replicate(Cipher *rop, size_t pos, RotKeySet const &rkeys) const;
+  template <class RotKey>
+  bool replicate(Cipher *rop, size_t pos, RotKeySet<RotKey> const &rkeys) const;
 };
 } // namespace fHE

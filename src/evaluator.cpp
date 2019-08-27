@@ -35,6 +35,8 @@ struct Evaluator::Impl {
 
   bool rotate_slots_inplace(Cipher*rop, RotKey const& rkey) const;
 
+  bool rotate_slots_inplace(Cipher*rop, MixedRotKey const& rkey) const;
+
   bool rotate_slots_inplace_non_ntt(Cipher*rop, RotKey const& rkey) const;
 
 private:
@@ -55,6 +57,10 @@ private:
   void apply_rotation_key(std::array<context::poly_t *, 2> rop,
                           std::array<context::poly_t *, 2> d,
                           RotKey const &rotk) const;
+
+  void apply_rotation_key(std::array<context::poly_t *, 2> rop,
+                          std::array<context::poly_t *, 2> d,
+                          MixedRotKey const &rotk) const;
 
   void apply_rotation_key_non_ntt(std::array<context::poly_t *, 2> rop,
                                   std::array<context::poly_t *, 2> d,
@@ -139,7 +145,17 @@ bool Evaluator::rotate_slots_non_ntt(Cipher*rop, RotKey const& rkey) const
   return impl_->rotate_slots_inplace_non_ntt(rop, rkey);
 }
 
-bool Evaluator::rotate_slots(Cipher *rop, int offset, RotKeySet const& rkeys) const
+bool Evaluator::rotate_slots(Cipher*rop, MixedRotKey const& rkey) const
+{
+  if (!impl_ || !rop) return false;
+  if (!rop->canonical()) {
+    std::cerr << "Can only rotate canonical ciphertext, call relinearize first." << std::endl;
+    return false;
+  }
+  return impl_->rotate_slots_inplace(rop, rkey);
+}
+
+bool Evaluator::rotate_slots(Cipher *rop, int offset, RotKeySet<MixedRotKey> const& rkeys) const
 {
   if (!impl_ || !rop) return false;
   if (!rop->canonical()) {
@@ -147,11 +163,14 @@ bool Evaluator::rotate_slots(Cipher *rop, int offset, RotKeySet const& rkeys) co
     return false;
   }
   constexpr size_t nr_slots = context::degree >> 1u;
+  bool sign = offset < 0;
   offset = std::abs(offset) % nr_slots;
+  if (sign)
+      offset = nr_slots - offset;
   int steps = (int) (std::log2((double) offset) + 1);
   for (int i = 0; i < steps; ++i) {
     if (offset & (1 << i)) {
-      RotKey const* rotkey = rkeys.get(1 << i);
+      auto rotkey = rkeys.get(1 << i);
       if (!rotkey) {
         std::cerr << "No such rotation key for offset " << (1 << i) << "\n";
         return false;
@@ -162,7 +181,34 @@ bool Evaluator::rotate_slots(Cipher *rop, int offset, RotKeySet const& rkeys) co
   return true;
 }
 
-bool Evaluator::rotate_slots_non_ntt(Cipher *rop, int offset, RotKeySet const& rkeys) const
+bool Evaluator::rotate_slots(Cipher *rop, int offset, RotKeySet<RotKey> const& rkeys) const
+{
+  if (!impl_ || !rop) return false;
+  if (!rop->canonical()) {
+    std::cerr << "Can only rotate canonical ciphertext, call relinearize first." << std::endl;
+    return false;
+  }
+  constexpr size_t nr_slots = context::degree >> 1u;
+  bool sign = offset < 0;
+  offset = std::abs(offset) % nr_slots;
+  if (sign)
+      offset = nr_slots - offset;
+  int steps = (int) (std::log2((double) offset) + 1);
+  for (int i = 0; i < steps; ++i) {
+    if (offset & (1 << i)) {
+      auto rotkey = rkeys.get(1 << i);
+      if (!rotkey) {
+        std::cerr << "No such rotation key for offset " << (1 << i) << "\n";
+        return false;
+      }
+      rotate_slots(rop, *rotkey);
+    }
+  }
+  return true;
+}
+
+template <class RotKey>
+bool Evaluator::rotate_slots_non_ntt(Cipher *rop, int offset, RotKeySet<RotKey> const& rkeys) const
 {
   if (!impl_ || !rop) return false;
   if (!rop->canonical()) {
@@ -185,7 +231,8 @@ bool Evaluator::rotate_slots_non_ntt(Cipher *rop, int offset, RotKeySet const& r
   return true;
 }
 
-bool Evaluator::replicate(Cipher *rop, size_t pos, RotKeySet const &rkeys) const
+template <class RotKey>
+bool Evaluator::replicate(Cipher *rop, size_t pos, RotKeySet<RotKey> const &rkeys) const
 {
   if (!impl_ || !rop || !encoder) return false;
   if (!rop->canonical()) {
@@ -250,6 +297,20 @@ bool Evaluator::Impl::add_inplace(
 }
 
 bool Evaluator::Impl::rotate_slots_inplace(Cipher*rop, RotKey const& rkey) const
+{
+  if (!rop)
+    return false;
+  if (rkey.galois == 0)
+    return true;
+  apply_galois(&(rop->bx), rkey.galois);
+  apply_galois(&(rop->ax), rkey.galois);
+  std::array<context::poly_t *, 2> result{&rop->bx, &rop->ax};
+  std::array<context::poly_t *, 2>  input{&rop->bx, &rop->ax};
+  apply_rotation_key(result, input, rkey);
+  return true;
+}
+
+bool Evaluator::Impl::rotate_slots_inplace(Cipher*rop, MixedRotKey const& rkey) const
 {
   if (!rop)
     return false;
@@ -335,6 +396,123 @@ void Evaluator::Impl::apply_rotation_key(
   for (int i : {0, 1})
     bconv.approximated_mod_down(rop[i], d_rotk[i]);
   (*rop[0]) += cpy_d0;
+}
+
+//! Input polynomials [ct] should be in the ntt domain.
+//! Resulting polynomials [rop] are also in the ntt domain.
+void Evaluator::Impl::apply_rotation_key(
+  std::array<context::poly_t *, 2> rop,
+  std::array<context::poly_t *, 2> ct,
+  MixedRotKey const &rotk) const 
+{
+  //! rop[0] = ct[0] + ct[1] * rotk.beta
+  //! rop[1] =         ct[1] * rotk.alpha
+  using namespace fHE;
+  using T = yell::params::value_type;
+  using gT = yell::params::gt_value_type;
+  constexpr size_t degree= context::degree;
+  constexpr size_t bytes = degree * sizeof(T);
+  const size_t Li = ct[0]->moduli_count();
+
+  std::array<gT, degree> beta_ax[Li + 1];
+  std::array<gT, degree> alpha_ax[Li + 1];
+  for (long i = 0; i < Li + 1; ++i) {
+    std::memset(beta_ax[i].data(), 0, bytes * 2);
+    std::memset(alpha_ax[i].data(), 0, bytes * 2);
+  }
+
+  for (size_t i = 0; i < Li; ++i) {
+    std::array<T, degree> ct_mod_qi_power;
+    std::memcpy(ct_mod_qi_power.data(), ct[1]->cptr_at(i), bytes);
+    yell::ntt<degree>::backward(ct_mod_qi_power.data(), i);
+
+    // juhou: rotation key : { (beta_i, alpha_i) } each with Li + 1 moduli
+    //  [beta_ax]_qj = \sum_i [[ct_1]_qi]_qj * [beta_i]_qj
+    // [alpha_ax]_qj = \sum_i [[ct_1]_qi]_qj * [alpha_i]_qj
+    std::array<T, degree> ct_mod_qj;
+    for (size_t j = 0; j < Li + 1; ++j) {
+      size_t j_idx = j < Li ? j : context::index_sp_prime(0);
+      const T* ct_mod_qj_ptr = nullptr;
+      if (j == i) {
+        ct_mod_qj_ptr = ct[1]->cptr_at(j);
+      } else {
+        std::memcpy(ct_mod_qj.data(), ct_mod_qi_power.cbegin(), bytes);
+        // [ct_1]_qi -> [[ct_1]_qi]_qj
+        yell::ntt<degree>::forward(ct_mod_qj.data(), j_idx); 
+        ct_mod_qj_ptr = ct_mod_qj.data();
+      }
+
+      lazy_muladd(beta_ax[j].data(),
+                  rotk.get_beta_at(i)->cptr_at(j_idx),
+                  ct_mod_qj_ptr, degree);
+
+      lazy_muladd(alpha_ax[j].data(),
+                  rotk.get_alpha_at(i)->cptr_at(j_idx),
+                  ct_mod_qj_ptr, degree);
+    }
+  }
+
+  // reduction
+  context::poly_t ans_bx(Li + 1);
+  context::poly_t ans_ax(Li + 1);
+  for (long j = 0; j < Li + 1; ++j) {
+    size_t j_idx = j < Li ? j : context::index_sp_prime(0);
+    std::transform(beta_ax[j].cbegin(), beta_ax[j].cend(),
+                   ans_bx.ptr_at(j),
+                   [j_idx](gT bx) -> T {
+                     yell::ops::barret_reduction(&bx, j_idx);
+                     return (T) bx;
+                   });
+
+    std::transform(alpha_ax[j].cbegin(), alpha_ax[j].cend(),
+                   ans_ax.ptr_at(j),
+                   [j_idx](gT ax) -> T {
+                     yell::ops::barret_reduction(&ax, j_idx);
+                     return (T) ax;
+                   });
+  }
+  
+  // rescale the last special prime
+  const int k = context::index_sp_prime(0);
+  const T qk = yell::params::P[k];
+  // convert the last moduli to power-basis
+  yell::ntt<degree>::backward(ans_ax.ptr_at(Li), k);
+  yell::ntt<degree>::backward(ans_bx.ptr_at(Li), k);
+
+  std::array<T, degree> mod_qk_mod_qj;
+  yell::ops::mulmod_shoup mulmod;
+  yell::ops::addmod addmod;
+  for (long j = 0; j < Li; ++j) {
+    // ((ct mod qj) - (ct mod qk)) mod qj
+    // qk^(-1) * ((ct mod qj) - (ct mod qk)) mod qj
+    const T qj = yell::params::P[j];
+    const T qk_inv_qj = yell::math::inv_mod_prime(qk, j);
+    const T shoup = yell::ops::shoupify(qk_inv_qj, j);
+
+    //! rop[1] = ct[1] * rotk.alpha
+    std::memcpy(mod_qk_mod_qj.data(), ans_ax.ptr_at(Li), bytes);
+    yell::ntt<degree>::forward(mod_qk_mod_qj.data(), j);
+    auto op0_ptr = ans_ax.cptr_at(j);
+    auto op1_ptr = mod_qk_mod_qj.data();
+    auto dst_ptr = rop[1]->ptr_at(j);
+    for (long d = 0; d < degree; ++d, ++op0_ptr, ++op1_ptr) {
+      T v = (*op0_ptr) + qj - (*op1_ptr);
+      *dst_ptr++ = mulmod(v, qk_inv_qj, shoup, j);
+    }
+
+    //! rop[0] = ct[0] + ct[1] * rotk.beta
+    std::memcpy(mod_qk_mod_qj.data(), ans_bx.ptr_at(Li), bytes);
+    yell::ntt<degree>::forward(mod_qk_mod_qj.data(), j);
+    op0_ptr = ans_bx.cptr_at(j);
+    op1_ptr = mod_qk_mod_qj.data();
+    auto op2_ptr = ct[0]->cptr_at(j);
+    dst_ptr = rop[0]->ptr_at(j);
+    for (long d = 0; d < degree; ++d, ++op0_ptr, ++op1_ptr, ++op2_ptr) {
+      T v = (*op0_ptr) + qj - (*op1_ptr);
+      mulmod.compute(v, qk_inv_qj, shoup, j);
+      *dst_ptr++ = addmod(*op2_ptr, v, j);
+    }
+  }
 }
 
 //! Input polynomials [d] should be in the power domain.
