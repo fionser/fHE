@@ -17,8 +17,9 @@ public:
     tmp.forward();
     for (size_t cm = 0; cm < L; ++cm)
       std::memcpy(sx.ptr_at(cm), tmp.cptr_at(cm), bytes);
+
     for (size_t cm = 0; cm < K; ++cm)
-      std::memcpy(ext_sx.ptr_at(cm), tmp.cptr_at(K + cm), bytes);
+      std::memcpy(ext_sx.ptr_at(cm), tmp.cptr_at(L + cm), bytes);
     tmp.clear();
   }
 
