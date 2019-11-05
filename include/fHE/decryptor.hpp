@@ -13,6 +13,8 @@ struct Decryptor {
 
   bool decrypt(context::poly_t *rop, Cipher const& ctx, SK const& sk) const;
 
+  bool decrypt_with_extra_primes(context::poly_t *rop, Cipher const& ctx, SK const& sk) const;
+
   bool decrypt(double *rop, Cipher const& ctx, SK const& sk) const;
 
   bool decrypt(std::vector<double> *rop, Cipher const& ctx, SK const& sk) const;

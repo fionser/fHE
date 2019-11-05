@@ -13,6 +13,8 @@ struct Encryptor {
 
   bool encrypt(Cipher *rop, context::poly_t const& msg, PK const& pk) const;
 
+  bool encrypt_zero(Cipher *rop, PK const& pk) const;
+
   bool encrypt(Cipher *rop, double const& values, PK const &pk) const;
 
   bool encrypt(Cipher *rop, std::vector<double> const& values, PK const &pk) const;

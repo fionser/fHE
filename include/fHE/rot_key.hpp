@@ -1,121 +1,129 @@
 #pragma once
-#include "fHE/context.hpp"
-#include <vector>
 #include <memory>
 #include <unordered_map>
+#include <vector>
+#include "fHE/context.hpp"
 namespace fHE {
-struct SK; // forward declaration
+struct SK;  // forward declaration
 
-struct RotKey {
-private:
-  static constexpr size_t degree = context::degree;
-  static constexpr size_t L = context::nr_ctxt_moduli;
-  static constexpr size_t K = context::nr_sp_primes;
+struct SK;
+class KSwithKeys;
+class PrimeBundles;
+class SpecialPrimeChain;
 
-  /*
-     Multiply P (i.e., the product of all special primes).
-     [x]_{q1, q2, ..., qL} --> [P * x]_{q1, q2, ..., qL}
-   */
-  void lift_normal_moduli(context::poly_t *op) const;
+using poly_t = context::poly_t;
 
+class RotKey {
 public:
-  enum class Direction {
-    LEFT,
-    RIGHT
-  };
-  const size_t galois;
-  context::poly_t beta; //! L + K moduli
-  context::poly_t alpha;//! L + K moduli
+    enum class Direction { LEFT, RIGHT };
 
-  explicit RotKey(SK const &sk, uint16_t offset, Direction dir);
+    explicit RotKey(SK const& sk,
+                    uint16_t offset,
+                    Direction dir,
+                    std::shared_ptr<PrimeBundles> bundles,
+                    std::shared_ptr<SpecialPrimeChain> chain);
 
-  RotKey(RotKey const&oth) = delete;
+    const poly_t& alpha_at(size_t j) const;
 
-  RotKey(RotKey &&oth) = delete;
+    const poly_t& beta_at(size_t j) const;
 
-  RotKey& operator=(RotKey const&oth) = delete;
+    size_t galois() const;
 
-  ~RotKey();
+    ~RotKey();
+
+private:
+    std::shared_ptr<KSwithKeys> key_;
 };
 
-struct MixedRotKey {
-private:
-  static constexpr size_t degree = context::degree;
-  static constexpr size_t L = context::nr_ctxt_moduli;
-  using poly_t = context::poly_t;
-  std::vector<poly_t> alpha; // L polynomials, each L + 1 moduli
-  std::vector<poly_t> beta ; // L polynomials, each L + 1 moduli
+// struct MixedRotKey {
+// private:
+//     static constexpr size_t degree = context::degree;
+//     static constexpr size_t L      = context::nr_ctxt_moduli;
+//     using poly_t                   = context::poly_t;
+//     std::vector<poly_t> alpha;  // L polynomials, each L + 1 moduli
+//     std::vector<poly_t> beta;   // L polynomials, each L + 1 moduli
+//
+// public:
+//     enum class Direction { LEFT, RIGHT };
+//
+//     const size_t galois;
+//
+//     explicit MixedRotKey(SK const& sk, uint16_t offset, Direction dir);
+//
+//     MixedRotKey(MixedRotKey const& oth) = delete;
+//
+//     MixedRotKey(MixedRotKey&& oth) = delete;
+//
+//     MixedRotKey& operator=(MixedRotKey const& oth) = delete;
+//
+//     const poly_t* get_beta_at(size_t j) const { return &beta.at(j); }
+//
+//     const poly_t* get_alpha_at(size_t j) const { return &alpha.at(j); }
+//
+//     poly_t* get_beta_at(size_t j) { return &beta.at(j); }
+//
+//     poly_t* get_alpha_at(size_t j) { return &alpha.at(j); }
+//
+//     ~MixedRotKey();
+// };
 
-public:
-  enum class Direction {
-    LEFT,
-    RIGHT
-  };
+template <class T>
+struct KeyFactory {};
 
-  const size_t galois;
+// template <>
+// struct KeyFactory<MixedRotKey> {
+//     std::shared_ptr<MixedRotKey> create(const SK& sk,
+//                                         uint16_t idx,
+//                                         MixedRotKey::Direction dir,
+//                                         std::shared_ptr<PrimeBundles> #<{(||)}>#,
+//                                         std::shared_ptr<SpecialPrimeChain> #<{(||)}>#) {
+//         return std::make_shared<MixedRotKey>(sk, idx, dir);
+//     }
+// };
 
-  explicit MixedRotKey(SK const &sk, uint16_t offset, Direction dir);
-
-  MixedRotKey(MixedRotKey const&oth) = delete;
-
-  MixedRotKey(MixedRotKey &&oth) = delete;
-
-  MixedRotKey& operator=(MixedRotKey const&oth) = delete;
-
-  const poly_t* get_beta_at(size_t j) const {
-    return &beta.at(j);
-  }
-
-  const poly_t* get_alpha_at(size_t j) const {
-    return &alpha.at(j);
-  }
-
-  poly_t* get_beta_at(size_t j) {
-    return &beta.at(j);
-  }
-
-  poly_t* get_alpha_at(size_t j) {
-    return &alpha.at(j);
-  }
-
-  ~MixedRotKey();
+template <>
+struct KeyFactory<RotKey> {
+    std::shared_ptr<RotKey> create(const SK& sk,
+                                   uint16_t idx,
+                                   RotKey::Direction dir,
+                                   std::shared_ptr<PrimeBundles> bundles,
+                                   std::shared_ptr<SpecialPrimeChain> chain) {
+        return std::make_shared<RotKey>(sk, idx, dir, bundles, chain);
+    }
 };
 
 template <class RotKeyType>
 struct RotKeySet {
 private:
-  static constexpr size_t logn = yell::static_log2<context::degree / 2>::value;
-  using rotkey_ptr = std::shared_ptr<RotKeyType>;
-  std::unordered_map<size_t, rotkey_ptr> rot_keys;
+    static constexpr size_t logn = yell::static_log2<context::degree / 2>::value;
+    using rotkey_ptr             = std::shared_ptr<RotKeyType>;
+    std::unordered_map<size_t, rotkey_ptr> rot_keys;
 
 public:
-  //! create log(N) (left) rotation key so that we can rotate with
-  //! any offset in [0, N).
-  explicit RotKeySet(SK const& sk) {
-    for (size_t i = 0; i < logn; ++i) {
-      int idx = 1 << i;
-      auto obj = std::make_shared<RotKeyType>(sk, idx, RotKeyType::Direction::LEFT);
-      rot_keys.insert({idx, std::move(obj)});
+    RotKeySet(SK const& sk, std::shared_ptr<PrimeBundles> bundles, std::shared_ptr<SpecialPrimeChain> chain) {
+        KeyFactory<RotKeyType> factory;
+        for (size_t i = 0; i < logn; ++i) {
+            int idx  = 1 << i;
+            auto obj = factory.create(sk, idx, RotKeyType::Direction::LEFT, bundles, chain);
+            rot_keys.insert({idx, std::move(obj)});
+        }
     }
-  }
 
-  RotKeySet(RotKeySet const&oth) = delete;
+    RotKeySet(RotKeySet const& oth) = delete;
 
-  RotKeySet(RotKeySet &&oth) = delete;
+    RotKeySet(RotKeySet&& oth) = delete;
 
-  RotKeySet& operator=(RotKeySet const&oth) = delete;
+    RotKeySet& operator=(RotKeySet const& oth) = delete;
 
-  const RotKeyType* get(uint16_t offset) const {
-      if (offset >= (1LL << logn))
-          return nullptr;
-      auto kv = rot_keys.find(offset);
-      if (kv == rot_keys.end())
-          return nullptr;
-      return kv->second.get();
-  }
+    const RotKeyType* get(uint16_t offset) const {
+        if (offset >= (1LL << logn)) return nullptr;
+        auto kv = rot_keys.find(offset);
+        if (kv == rot_keys.end()) return nullptr;
+        return kv->second.get();
+    }
 
-  ~RotKeySet() {}
+    ~RotKeySet() {}
 };
 
-} // namespace fHE
+}  // namespace fHE
 

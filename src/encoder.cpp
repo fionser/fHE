@@ -24,9 +24,10 @@ Encoder::Encoder()
   }
 
   const double PI_ = 3.14159265358979323846;
-  std::complex<double> psi{ std::cos((2 * PI_) / (double)(m)), 
-    std::sin((2 * PI_) / (double)(m)) };
+  std::complex<double> psi{ std::cos((2 * PI_) / (double)(m)),  // 2N-th primitive root.
+                            std::sin((2 * PI_) / (double)(m)) };
 
+  // primitive roots are stored in the bit-reversed order
   for (size_t i = 0; i < degree; i++) {
     roots_[i] = std::pow(psi, (double) (yell::math::reverse_bits(i, logn)));
     inv_roots_[i] = 1.0 / roots_[i];
@@ -47,6 +48,8 @@ void Encoder::FFT_inplace(std::vector<std::complex<double>> &res) const {
       auto s = roots_[mm + j];
 
       for (size_t k = j1; k < j2 + 1; k++) {
+        // CT-style butterfly
+        // receives standard order input and gives bit-reversed order output
         assert(k < degree && k + tt < degree);
         auto u = res[k];
         auto v = res[k + tt] * s;
@@ -69,6 +72,8 @@ void Encoder::iFFT_inplace(std::vector<std::complex<double>> &res) const {
       auto s = inv_roots_.at(h + j);
 
       for (size_t k = k_start; k < k_end; k++) {
+        // GS-style butterfly
+        // receives bit-reversed output and gives standard order output
         auto u = res[k];
         auto v = res[k + tt];
         res[k] = u + v;
@@ -80,6 +85,7 @@ void Encoder::iFFT_inplace(std::vector<std::complex<double>> &res) const {
     tt *= 2;
   } // iFFT
 }
+
 std::vector<std::complex<double>> Encoder::apply_ifft(
   std::vector<std::complex<double>> const& values) const 
 {
@@ -90,8 +96,8 @@ std::vector<std::complex<double>> Encoder::apply_ifft(
   }
   std::vector<std::complex<double>> conj_values(degree, 0.);
   for (size_t i = 0; i < input_sizes; ++i) {
-    conj_values[matrix_reps_index_map_[i]] = values[i];
-    conj_values[matrix_reps_index_map_[i + nr_slots]] = std::conj(values[i]);
+    conj_values.at(matrix_reps_index_map_.at(i)) = values.at(i);
+    conj_values.at(matrix_reps_index_map_.at(i + nr_slots)) = std::conj(values.at(i));
   }
   iFFT_inplace(conj_values);
   return conj_values;
@@ -107,8 +113,8 @@ std::vector<std::complex<double>> Encoder::apply_ifft(
   }
   std::vector<std::complex<double>> conj_values(degree, 0.);
   for (size_t i = 0; i < input_sizes; ++i) {
-    conj_values[matrix_reps_index_map_[i]] = values[i];
-    conj_values[matrix_reps_index_map_[i + nr_slots]] = values[i];
+    conj_values.at(matrix_reps_index_map_.at(i)) = values.at(i);
+    conj_values.at(matrix_reps_index_map_.at(i + nr_slots)) = values.at(i);
   }
   iFFT_inplace(conj_values);
   return conj_values;

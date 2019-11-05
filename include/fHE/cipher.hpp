@@ -6,12 +6,16 @@ struct Cipher {
 private:
   double scale_ = 1.;
 public:
+  //! decryption logic: m = bx + ax * sx
   context::poly_t bx;
   context::poly_t ax;
   std::shared_ptr<context::poly_t> mul_aux = nullptr;
 
-  explicit Cipher(size_t L = context::nr_ctxt_moduli) 
-    : bx(L), ax(L) { assert(L < yell::params::kMaxNbModuli); }
+  explicit Cipher(size_t L) 
+    : bx(L), ax(L) { 
+        if (L == 0 || L >= yell::params::kMaxNbModuli)
+            throw std::invalid_argument("Cipher:: invalid number of moduli");
+    }
 
   Cipher(const Cipher &oth) 
     : scale_(oth.scale_),

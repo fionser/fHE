@@ -27,6 +27,7 @@ bool Encryptor::encrypt(Cipher *rop, context::poly_t const& msg, PK const& pk) c
         addmod.compute(*bx_ptr++, *msg_ptr++, cm);
     }
   }
+
   rop->bx.forward_lazy(); // lazy reduction
   rop->bx.add_product_of(u, pk.bx); // ctx.bx = u * pk.bx + e0 + msg
 
@@ -34,6 +35,22 @@ bool Encryptor::encrypt(Cipher *rop, context::poly_t const& msg, PK const& pk) c
   rop->ax.forward_lazy(); // lazy reduction
   rop->ax.add_product_of(u, pk.ax); // ctx.ax = u * pk.ax + e1
   return true;
+}
+
+bool Encryptor::encrypt_zero(Cipher *rop, PK const& pk) const {
+    if (!rop)
+        return false;
+    const size_t ctx_moduli = rop->moduli_count();
+    context::poly_t u(ctx_moduli, yell::ZO_dist());
+    u.forward();
+    rop->bx.set(context::gauss_struct(&context::fg_prng)); // e0
+    rop->bx.forward_lazy(); // lazy reduction
+    rop->bx.add_product_of(u, pk.bx); // ctx.bx = u * pk.bx + e0
+
+    rop->ax.set(context::gauss_struct(&context::fg_prng)); // e1
+    rop->ax.forward_lazy(); // lazy reduction
+    rop->ax.add_product_of(u, pk.ax); // ctx.ax = u * pk.ax + e1
+    return true;
 }
 
 bool Encryptor::encrypt(Cipher *rop, double const& value, PK const& pk) const
@@ -45,7 +62,7 @@ bool Encryptor::encrypt(Cipher *rop, std::vector<double> const& values, PK const
 {
   if (!rop || !encoder)
     return false;
-  context::poly_t plain(context::nr_ctxt_moduli);
+  context::poly_t plain(rop->moduli_count());
   encoder->encode(&plain, values, context::encoder_scale);
   rop->scale(context::encoder_scale);
   return encrypt(rop, plain, pk);
@@ -57,7 +74,7 @@ bool Encryptor::encrypt(Cipher *rop,
 {
   if (!rop || !encoder)
     return false;
-  context::poly_t plain(context::nr_ctxt_moduli);
+  context::poly_t plain(rop->moduli_count());
   encoder->encode(&plain, values, context::encoder_scale);
   rop->scale(context::encoder_scale);
   return encrypt(rop, plain, pk);

@@ -1,40 +1,31 @@
 #pragma once
-#include "fHE/keys.hpp"
-#include <vector>
+#include <memory>
+#include "fHE/context.hpp"
+
 namespace fHE {
-struct MultKey {
-private:
-  using poly_t = context::poly_t;
-  static constexpr size_t L = context::nr_ctxt_moduli;
-  std::vector<poly_t> alpha; // L polynomials, each L moduli
-  std::vector<poly_t> beta ; // L polynomials, each L moduli
 
+struct SK;
+class KSwithKeys;
+class PrimeBundles;
+class SpecialPrimeChain;
+using poly_t = context::poly_t;
+
+class MultKey {
 public:
-  explicit MultKey(SK const& sk);
+    explicit MultKey(SK const& sk,
+                     std::shared_ptr<PrimeBundles> const bundles,
+                     std::shared_ptr<SpecialPrimeChain> const chain);
 
-  MultKey(MultKey const& oth) = delete;
+    const poly_t& alpha_at(size_t j) const;
 
-  MultKey(MultKey && oth) = delete;
+    const poly_t& beta_at(size_t j) const;
 
-  MultKey& operator=(MultKey const& oth) = delete;
+    constexpr size_t galois() const { return 1UL; }
 
-  ~MultKey();
+    ~MultKey();
 
-  const poly_t* get_beta_at(size_t j) const {
-    return &beta.at(j);
-  }
-
-  const poly_t* get_alpha_at(size_t j) const {
-    return &alpha.at(j);
-  }
-
-  poly_t* get_beta_at(size_t j) {
-    return &beta.at(j);
-  }
-
-  poly_t* get_alpha_at(size_t j) {
-    return &alpha.at(j);
-  }
+private:
+    std::shared_ptr<KSwithKeys> key_;
 };
-} // namespace fHE
+}  // namespace fHE
 

@@ -5,6 +5,8 @@
 #include <complex>
 namespace fHE {
 struct Encoder {
+public:
+  static constexpr size_t generator = 5;
 private:
   static constexpr size_t degree = context::degree;
   std::array<uint32_t, degree> matrix_reps_index_map_;
@@ -13,7 +15,6 @@ private:
 
   const size_t nr_slots = degree >> 1u;
   const size_t logn = yell::static_log2<context::degree>::value;
-  const size_t generator = 3;
 
   void FFT_inplace(std::vector<std::complex<double>> &res) const;
 
