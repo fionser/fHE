@@ -304,25 +304,8 @@ void Evaluator::Impl::apply_rotation_key(std::array<context::poly_t *, 2> out,
         for (size_t i = 0; i < n_moduli; ++i) {
             size_t nrml_prime_idx = j * bundle_size + i;
             assert(nrml_prime_idx < cur_n_nrml_primes);
-            yell::ops::mulmod mulmod;
-            /// the j-th puncture bundle product under the 'nrml_prime_idx' prime.
-            T punch_prod     = bundles_->puncture_product({.puncture_idx = j, .nrml_prime_idx = nrml_prime_idx});
-            T punch_prod_inv = yell::math::inv_mod_prime(punch_prod, nrml_prime_idx);
-            assert(punch_prod_inv > 0);
-
-            if (punch_prod_inv > 1) {
-                /// multiply 'remain_prod' to cmult[2] using shoup's trick for faster multiplication.
-                T shoup = yell::ops::shoupify(punch_prod_inv, nrml_prime_idx);
-                yell::ops::mulmod_shoup mulmod_s;
-                std::transform(aux.cptr_at(nrml_prime_idx), aux.cptr_end(nrml_prime_idx), rns_decomp.ptr_at(i),
-                               [&mulmod_s, &punch_prod_inv, &shoup, &nrml_prime_idx](T v) {
-                                   return mulmod_s(v, punch_prod_inv, shoup, nrml_prime_idx);
-                               });
-            } else {
-                /// Since punch_prod_inv == 1, we just copy cmult[2].
-                size_t nbytes = sizeof(T) * degree;
-                std::memcpy(rns_decomp.ptr_at(i), aux.cptr_at(nrml_prime_idx), nbytes);
-            }
+            size_t nbytes = sizeof(T) * degree;
+            std::memcpy(rns_decomp.ptr_at(i), aux.cptr_at(nrml_prime_idx), nbytes);
             /// back to power-basis for the following Mod-up operations.
             yell::ntt<context::degree>::backward(rns_decomp.ptr_at(i), nrml_prime_idx);
         }
