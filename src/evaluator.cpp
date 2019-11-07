@@ -243,13 +243,14 @@ bool Evaluator::Impl::rotate_slots_inplace(Cipher *rop, RotKey const &rkey) cons
     if (!rop) return false;
     if (rkey.galois() == 0) return true;
 
-    apply_galois(&(rop->bx), rkey.galois());
-    apply_galois(&(rop->ax), rkey.galois());
+    apply_galois(&(rop->bx), rkey.galois()); // rot(bx) + rot(ax) * rot(s)
+    apply_galois(&(rop->ax), rkey.galois()); 
 
-    context::poly_t aux(rop->ax);
+    context::poly_t aux(rop->ax); // rot(ax)
     std::array<context::poly_t *, 2> result {&rop->bx, &rop->ax};
     result[1]->clear();
 
+    // rot(ax) * (rotk.beta, rotk.alpha) + (rot(bx), 0)
     apply_rotation_key(result, aux, rkey);
     return true;
 }
@@ -293,21 +294,21 @@ void Evaluator::Impl::apply_rotation_key(std::array<context::poly_t *, 2> out,
     assert(out[0]->moduli_count() == cur_n_nrml_primes);
     assert(out[1]->moduli_count() == cur_n_nrml_primes);
 
-    /// RNS-decompose
-    /// `rns_decomps` is `cur_n_bundles` polynomails, and each is using `bundle_size` moduli.
-    /// Invariant: cur_n_bundles * bundle_size = cur_n_nrml_primes.
-    std::vector<poly_t> rns_decomps;
-    for (size_t j = 0; j < cur_n_bundles; ++j) {
-        const size_t n_moduli = std::min(bundle_size * (j + 1), cur_n_nrml_primes) - bundle_size * j;
-        rns_decomps.emplace_back(n_moduli);
-        poly_t &rns_decomp = rns_decomps.back();  // point to the fresh poly.
-        for (size_t i = 0; i < n_moduli; ++i) {
-            size_t nrml_prime_idx = j * bundle_size + i;
-            assert(nrml_prime_idx < cur_n_nrml_primes);
-            size_t nbytes = sizeof(T) * degree;
-            std::memcpy(rns_decomp.ptr_at(i), aux.cptr_at(nrml_prime_idx), nbytes);
+    const int n_components = cur_n_nrml_primes % bundle_size == 0 ? cur_n_bundles : cur_n_bundles - 1;
+    /// Invariant: cur_n_nrml_primes = \sum_i rns_decomps[i].moduli_count
+    std::vector<poly_t> rns_decomps(n_components, poly_t(bundle_size));
+    if (rns_decomps.size() != cur_n_bundles) {
+        rns_decomps.emplace_back((size_t)(cur_n_nrml_primes - bundle_size * rns_decomps.size()));
+    }
+
+    const size_t nbytes = sizeof(T) * degree;
+    for (size_t j = 0, nrml_prime_idx = 0; j < cur_n_bundles; ++j) {
+        const size_t end = std::min(nrml_prime_idx + bundle_size, cur_n_nrml_primes);
+        for (int idx = 0; nrml_prime_idx < end; ++nrml_prime_idx, ++idx) {
+            T *rns_decomp_ptr = rns_decomps[j].ptr_at(idx);
+            std::memcpy(rns_decomp_ptr, aux.cptr_at(nrml_prime_idx), nbytes);
             /// back to power-basis for the following Mod-up operations.
-            yell::ntt<context::degree>::backward(rns_decomp.ptr_at(i), nrml_prime_idx);
+            yell::ntt<context::degree>::backward(rns_decomp_ptr, nrml_prime_idx);
         }
     }
 

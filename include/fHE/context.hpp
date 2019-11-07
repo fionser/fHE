@@ -4,7 +4,7 @@
 #include <cstddef>
 namespace fHE {
 struct context {
-  static constexpr size_t degree = 1L << 12;
+  static constexpr size_t degree = 1L << 14;
   static constexpr size_t max_moduli_bits = 620;
   static constexpr double sigma = 3.2;
   static constexpr double encoder_scale = (double) (1ULL << 62);

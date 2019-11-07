@@ -33,13 +33,12 @@ KSwithKeys::KSwithKeys(poly_t const& src_key,
         beta[j].forward();
 
         beta[j].add_product_of(alpha[j], dst_key);
-        beta[j].negate();  // beta[j] = -alpha[j] * dst_key + noise
+        beta[j].negate(); 
 
-        /// multiply the product of special primes to the source key, and add it to beta[j].
         yell::ops::addmod addmod;
-        yell::ops::mulmod mulmod;
         yell::ops::mulmod_shoup mulmod_s;
 
+        /// Note: Here we apply Halvei's trick.
         std::vector<size_t> moduli_indices = bundles->prime_indices_in_bundle(j);
         for (size_t mod_idx : moduli_indices) {
             T P          = chain->prod_of_spcl_primes(mod_idx);
@@ -47,29 +46,11 @@ KSwithKeys::KSwithKeys(poly_t const& src_key,
             auto dst     = beta[j].ptr_at(mod_idx);
             auto src_ptr = src_key.cptr_at(mod_idx);
             auto end     = src_key.cptr_end(mod_idx);
-            while (src_ptr != end) addmod.compute(*dst++, mulmod_s(*src_ptr++, P, shoup, mod_idx), mod_idx);
+            while (src_ptr != end) {
+                addmod.compute(*dst++, mulmod_s(*src_ptr++, P, shoup, mod_idx), mod_idx);
+            }
         }
     }
-
-    // for (size_t i = 0; i < n_nrml_primes; ++i) {
-    //     // T puncture        = bundles->puncture_product({.puncture_idx = j, .nrml_prime_idx = i});
-    //     // if (puncture == 0) continue;
-    //     // T multipler = ulmod(puncture, spcl_prime_prod, i);
-    //     assert(multipler > 0);
-    //
-    //     T spcl_prime_prod = chain->prod_of_spcl_primes(i);
-    //     T multipler = spcl_prime_prod;
-    //
-    //     T shoup = yell::ops::shoupify(multipler, i);
-    //
-    //     auto dst     = beta[j].ptr_at(i);
-    //     auto src_ptr = src_key.cptr_at(i);
-    //     auto end     = src_key.cptr_end(i);
-    //     while (src_ptr != end) {
-    //         mulmod_s(*src_ptr++, multipler, shoup, i);
-    //         addmod.compute(*dst++, mulmod_s(*src_ptr++, multipler, shoup, i), i);
-    //     }
-    // }
 }
 
 KSwithKeys::~KSwithKeys() {}

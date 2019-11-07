@@ -8,7 +8,6 @@
 #include "fHE/encoder.hpp"
 #include "fHE/evaluator.hpp"
 #include "yell/utils/timer.hpp"
-#include "yell/montgomery.hpp"
 #include "fHE/base_converter.hpp"
 #include "fHE/yell.hpp"
 #include "fHE/prime_bundles.hpp"
@@ -50,16 +49,12 @@ void run(int n_spcl_primes) {
 
     double time = 0.;
     constexpr long NT = 100;
-    yell::ntt<fHE::context::degree>::n_call_forward = 0;
-    yell::ntt<fHE::context::degree>::n_call_backward = 0;
     for (long i = 0; i < NT; ++i) {
 
         AutoTimer timer(&time);
         evaluator.rotate_slots(&rlwe, 1, rotkeys);
     }
     std::cout << time / NT << "ms\n";
-    std::cout << yell::ntt<fHE::context::degree>::n_call_forward << " NTT\n";
-    std::cout << yell::ntt<fHE::context::degree>::n_call_backward << " invNTT\n";
 
     // if (n_spcl_primes == 1) {
         decryptor.decrypt(&vals, rlwe, sk);
@@ -71,8 +66,8 @@ void run(int n_spcl_primes) {
 
 int main(int argc, char *argv[]) {
     int n = argc < 1 ? 1 : std::atoi(argv[1]);
-    // std::cout << fHE::context::max_moduli_bits << " bits\n";
-    // for (long n = 13; n >= 1; --n)
-    run(n);
+    std::cout << fHE::context::max_moduli_bits << " bits\n";
+    for (long n = 13; n >= 1; --n)
+        run(n);
     return 0;
 }

@@ -16,7 +16,7 @@ endif()
 # optimization flags support
 if(CMAKE_BUILD_TYPE MATCHES Release)
 	set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG -O2")
-	foreach(FLAG -march=native -mtune=native -funroll-loops)
+	foreach(FLAG -march=native -mtune=native -funroll-loops -mavx)
 		string(REGEX REPLACE -= _ FLAG_ID ${FLAG})
 		string(TOUPPER ${FLAG_ID} FLAG_ID)
 		CHECK_CXX_COMPILER_FLAG(${FLAG} COMPILER_SUPPORTS${FLAG_ID})
